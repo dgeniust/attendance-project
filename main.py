@@ -1,191 +1,180 @@
-import cv2
-from deepface import DeepFace
-from pymongo import MongoClient
-import warnings
-import urllib.parse
 import os
+import cv2
+import numpy as np
+import urllib.parse
+import warnings
+import jwt
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, status, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, EmailStr
+from typing import Optional
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-# Tắt các warning không cần thiết của thư viện để terminal sạch hơn
-warnings.filterwarnings("ignore")
 
+# Import Lớp đối tượng xử lý từ file service.py vừa tạo
+from auth import AuthService
+from attendance import AttendanceService
+security_scheme = HTTPBearer()
+warnings.filterwarnings("ignore")
 load_dotenv()
+
+app = FastAPI(
+    title="AttendSync AI Endpoint Engine",
+    description="Hệ thống Microservice cung cấp API quét nhận diện khuôn mặt sinh viên.",
+    version="1.0.0"
+)
+
+# Cấu hình CORS tiếp nhận tín hiệu từ React Frontend của bạn
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# -------------------------------------------------------
+# CÁC ĐỐI TƯỢNG ĐỊNH NGHĨA DỮ LIỆU ĐẦU VÀO (PYDANTIC SCHEMAS)
+# -------------------------------------------------------
+class UserRegisterSchema(BaseModel):
+    student_id: str
+    name: str
+    email: EmailStr
+    password: str
+
+class UserLoginSchema(BaseModel):
+    student_id_or_email: str
+    password: str
+
+class ForgotPasswordSchema(BaseModel):
+    email: EmailStr
+
+class ResetPasswordSchema(BaseModel):
+    token: str
+    new_password: str
 # ==========================================
-# 1. CẤU HÌNH DATABASE
+# CẤU HÌNH & KHỞI TẠO ATTENDANCE SERVICE
 # ==========================================
 username = os.getenv("MONGO_USERNAME")
 password = os.getenv("MONGO_PASSWORD")
 cluster_url = os.getenv("CLUSTER_URL")
 
-# 2. Sử dụng quote_plus để mã hóa username và password
 encoded_user = urllib.parse.quote_plus(username)
 encoded_pw = urllib.parse.quote_plus(password)
-
-# 3. Tạo chuỗi URI chuẩn
 MONGO_URI = f"mongodb+srv://{encoded_user}:{encoded_pw}@{cluster_url}/?appName=attendance"
-client = MongoClient(MONGO_URI)
-db = client["attendance_db"]
-collection = db["students"]
-# def register_student(img_path, student_id, name):
-#     print(f"⚙️ Đang trích xuất vector cho {name}...")
-#     try:
-#         # Lấy vector từ ảnh có sẵn
-#         result = DeepFace.represent(
-#             img_path=img_path, 
-#             model_name="Facenet", 
-#             detector_backend="retinaface",
-#             enforce_detection=True
-#         )
-        
-#         embedding_vector = result[0]["embedding"]
-        
-#         # Lưu vào MongoDB
-#         student_doc = {
-#             "student_id": student_id,
-#             "name": name,
-#             "embedding": embedding_vector
-#         }
-        
-#         # Kiểm tra xem sinh viên đã có trong DB chưa, nếu chưa thì thêm mới
-#         if collection.count_documents({"student_id": student_id}) == 0:
-#             collection.insert_one(student_doc)
-#             print(f"✅ Đã lưu Vector của {name} vào Database thành công!")
-#         else:
-#             print(f"⚠️ Sinh viên {student_id} đã tồn tại trong DB.")
-            
-#     except ValueError:
-#         print(f"❌ Lỗi: Không tìm thấy khuôn mặt trong ảnh {img_path}!")
-# ==========================================
-# 2. HÀM XỬ LÝ NHẬN DIỆN VÀ ĐIỂM DANH (ĐÃ NÂNG CẤP)
-# ==========================================
-def recognize_and_attendance(frame, threshold=0.88):
-    print("\n⏳ Đang phân tích và kiểm tra thực thể...")
+
+# Khởi tạo một thực thể service duy nhất chạy xuyên suốt vòng đời ứng dụng
+# attendance_service = AttendanceService(mongo_uri=MONGO_URI)
+auth_service = AuthService(mongo_uri=MONGO_URI)
+attendance_service = AttendanceService(mongo_uri=MONGO_URI)
+# -------------------------------------------------------
+# HELPER: KIỂM TRA ĐĂNG NHẬP (DEPENDENCY)
+# -------------------------------------------------------
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+    """Hàm Middleware giải mã JWT để bảo vệ các Endpoint bảo mật"""
+    token = credentials.credentials
     try:
-        # NÂNG CẤP 1 & 2: Truyền trực tiếp frame (không lưu file tạm)
-        # BƯỚC 1: Cắt khuôn mặt và kiểm tra giả mạo (Anti-Spoofing)
-        face_objs = DeepFace.extract_faces(
-            img_path=frame, 
-            detector_backend="retinaface",
-            enforce_detection=True,
-            anti_spoofing=True # BẬT CHỨC NĂNG CHỐNG GIẢ MẠO
-        )
-        
-        face_data = face_objs[0] # Lấy khuôn mặt đầu tiên tìm thấy
-        
-        # Kiểm tra cờ 'is_real'
-        if not face_data.get("is_real", True):
-            print("🚨 CẢNH BÁO: Phát hiện giả mạo (Giơ điện thoại/Ảnh in)!")
-            return False, "FAKE FACE"
-            
-        print("✅ Xác thực người thật thành công. Đang trích xuất Vector...")
-        
-        # BƯỚC 2: Trích xuất Vector
-        # Lấy mảng ảnh khuôn mặt đã được crop sẵn từ bước 1
-        cropped_face = face_data["face"]
-        
-        # detector_backend="skip" vì khuôn mặt đã được detect và cắt chuẩn ở BƯỚC 1 rồi, 
-        # bỏ qua detect lần 2 để tăng tốc độ xử lý gấp đôi.
-        result = DeepFace.represent(
-            img_path=cropped_face, 
-            model_name="Facenet", 
-            detector_backend="skip" 
-        )
-        
-        query_vector = result[0]["embedding"]
-        
-        # ==========================================
-        # BƯỚC 3: So khớp với MongoDB (Pipeline giữ nguyên)
-        # ==========================================
-        pipeline = [
-            {
-                "$vectorSearch": {
-                    "index": "vector_index", 
-                    "path": "embedding",
-                    "queryVector": query_vector,
-                    "numCandidates": 100,
-                    "limit": 1
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0, "student_id": 1, "name": 1,
-                    "score": {"$meta": "vectorSearchScore"} 
-                }
-            }
-        ]
-        
-        matches = list(collection.aggregate(pipeline))
-        
-        if matches:
-            best_match = matches[0]
-            score = best_match['score']
-            
-            if score >= threshold:
-                print(f"✅ ĐIỂM DANH THÀNH CÔNG: {best_match['name']} - MSSV: {best_match['student_id']}")
-                print(f"   Độ khớp (Similarity): {score:.4f}")
-                return True, best_match['name']
-            else:
-                print(f"⚠️ NGƯỜI LẠ! (Khớp nhất với {best_match['name']} nhưng điểm chỉ đạt {score:.4f})")
-                return False, "Unknown"
-        else:
-            print("❌ Chưa có ai trong Database!")
-            return False, "Empty DB"
-            
-    except ValueError:
-         print("❌ Lỗi: Không tìm thấy khuôn mặt chuẩn. Hãy đứng thẳng và đảm bảo đủ sáng!")
-         return False, "No Face"
-    except Exception as e:
-         print(f"❌ Lỗi hệ thống: {e}")
-         return False, "Error"
-# ==========================================
-# 3. GIAO DIỆN CAMERA CHÍNH (OPENCV)
-# ==========================================
-def main():
-    # Khởi động Webcam (0 là camera mặc định của laptop)
-    cap = cv2.VideoCapture(0)
-    
-    print("=========================================")
-    print(" HỆ THỐNG ĐIỂM DANH KHUÔN MẶT SẴN SÀNG")
-    print("=========================================")
-    print("- Nhấn phím 'c' để điểm danh (Capture)")
-    print("- Nhấn phím 'q' để thoát (Quit)")
-    
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("❌ Lỗi: Không thể đọc dữ liệu từ Camera.")
-            break
-            
-        # Lật ngược ảnh để giống như soi gương
-        frame = cv2.flip(frame, 1)
-        
-        # Hiển thị hướng dẫn lên màn hình Camera
-        cv2.putText(frame, "Press 'C' to Scan | Press 'Q' to Exit", (20, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                    
-        cv2.imshow("HCMUTE Face Attendance System", frame)
-        
-        # Lắng nghe sự kiện bàn phím
-        key = cv2.waitKey(1) & 0xFF
-        
-        if key == ord('c'):
-            # Khi bấm 'c', gửi frame hiện tại vào hàm xử lý
-            success, name = recognize_and_attendance(frame)
-            
-            # Hiển thị kết quả tạm thời lên màn hình
-            color = (0, 255, 0) if success else (0, 0, 255)
-            cv2.putText(frame, f"Result: {name}", (20, 80), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
-            cv2.imshow("HCMUTE Face Attendance System", frame)
-            cv2.waitKey(2000) # Dừng màn hình 2 giây để xem kết quả
-            
-        elif key == ord('q'):
-            print("🛑 Đang đóng hệ thống...")
-            break
+        payload = jwt.decode(token, os.getenv("JWT_SECRET"), algorithms=[os.getenv("JWT_ALGORITHM")])
+        return payload  # Trả về thông tin sinh viên ẩn bên trong token
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Phiên đăng nhập đã hết hạn.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token xác thực không hợp lệ.")
 
-    # Dọn dẹp tài nguyên
-    cap.release()
-    cv2.destroyAllWindows()
+# Helper function: Chuyển đổi file upload của FastAPI thành ma trận ảnh OpenCV
+async def convert_upload_to_frame(file: UploadFile):
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    return frame
 
-if __name__ == "__main__":
-    # register_student("dataset\\Long.jpg", "221101xx", "Long")
-    main()
+# ==========================================
+# CÁC ROUTE API ENDPOINTS
+# ==========================================
+
+@app.post("/api/ai/attendance")
+async def api_attendance(file: UploadFile = File(...), threshold: float = 0.88,current_user: dict = Depends(get_current_user)):
+    """API Endpoint phục vụ quét khuôn mặt điểm danh thời gian thực"""
+    frame = await convert_upload_to_frame(file)
+    if frame is None:
+        raise HTTPException(status_code=400, detail="Tập tin hình ảnh bị hỏng hoặc không đúng định dạng.")
+    # Lấy student_id từ thông tin giải mã JWT
+    student_id = current_user.get("student_id")
+    result = attendance_service.recognize_and_attendance(frame=frame, current_student_id=student_id, threshold=threshold)
+    return result
+
+@app.post("/api/ai/register")
+async def api_register_student(
+    file: UploadFile = File(...), 
+    student_id: str = Form(...), 
+    name: str = Form(...)
+):
+    """API Endpoint phục vụ đăng ký hồ sơ khuôn mặt mới cho sinh viên"""
+    frame = await convert_upload_to_frame(file)
+    if frame is None:
+        raise HTTPException(status_code=400, detail="Tập tin hình ảnh bị hỏng hoặc không đúng định dạng.")
+        
+    success, message = attendance_service.register_student_face(frame, student_id)
+    
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        
+    return {"success": True, "message": message}
+
+
+# -------------------------------------------------------
+# ROUTER API ENDPOINTS: AUTHENTICATION
+# -------------------------------------------------------
+
+@app.post("/api/auth/register", status_code=status.HTTP_201_CREATED)
+def auth_register(user_data: UserRegisterSchema):
+    """API đăng ký tài khoản hệ thống cho sinh viên"""
+    success, message = auth_service.register_account(
+        student_id=user_data.student_id,
+        name=user_data.name,
+        email=user_data.email,
+        password=user_data.password
+    )
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return {"success": True, "message": message}
+
+@app.post("/api/auth/login")
+def auth_login(user_data: UserLoginSchema):
+    """API đăng nhập hệ thống, trả về JWT Access Token"""
+    result, message = auth_service.login_account(
+        student_id_or_email=user_data.student_id_or_email,
+        password=user_data.password
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=message)
+    return result
+
+@app.post("/api/auth/forgot-password")
+async def auth_forgot_password(data: ForgotPasswordSchema):
+    """API yêu cầu cấp lại mật khẩu và gửi Email chứa token xác thực"""
+    success, message = await auth_service.send_forgot_password_mail(email=data.email)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
+    return {"success": True, "message": message}
+
+@app.post("/api/auth/reset-password")
+def auth_reset_password(data: ResetPasswordSchema):
+    """API tiếp nhận token khôi phục và thiết lập mật khẩu mới"""
+    success, message = auth_service.reset_new_password(token=data.token, new_password=data.new_password)
+    if not success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+    return {"success": True, "message": message}
+
+# -------------------------------------------------------
+# VÍ DỤ: KIỂM TRA ENDPOINT ĐƯỢC BẢO VỆ BỞI JWT
+# -------------------------------------------------------
+@app.get("/api/students/me")
+def get_my_profile(current_user: dict = Depends(get_current_user)):
+    """API lấy thông tin cá nhân của sinh viên hiện tại, chỉ gọi được khi đã truyền Header JWT"""
+    return {"success": True, "user_profile": current_user}
+@app.get("/health")
+def health_check():
+    return {"status": "online", "engine": "FastAPI + DeepFace"}
+@app.get("/")
+def read_root():
+    return {"message": "Hệ thống điểm danh AI đang chạy!"}

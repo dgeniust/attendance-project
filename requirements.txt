@@ -1,0 +1,20 @@
+# Thư viện core
+opencv-python
+deepface
+pymongo
+python-dotenv
+numpy
+
+# Yêu cầu để chạy Anti-spoofing và Deep Learning models
+torch
+torchvision
+
+# Các thư viện hỗ trợ xử lý ảnh và model của DeepFace
+# tf-keras
+# tensorflow
+# tf-slim
+# retina-face
+# mtcnn
+# pillow
+# gdown
+# tqdm
