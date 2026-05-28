@@ -1,0 +1,20 @@
+# Bỏ qua môi trường ảo (Virtual Environment)
+venv/
+env/
+.venv/
+
+# Bỏ qua các file cấu hình nhạy cảm
+.env
+
+# Bỏ qua các file Python đã biên dịch
+__pycache__/
+*.pyc
+*.pyo
+
+# Bỏ qua thư mục IDE (VS Code, PyCharm)
+.vscode/
+.idea/
+
+# Bỏ qua các file log hoặc database tạm
+*.log
+*.db
