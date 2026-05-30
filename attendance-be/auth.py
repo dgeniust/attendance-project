@@ -83,7 +83,7 @@ class AuthService:
                 "student_id": user["student_id"],
                 "name": user["name"],
                 "email": user["email"],
-                "reward_points": user.get("reward_points", 0)
+                "reward_points": user.get("reward_points")
             }
         }, "Đăng nhập thành công."
 
