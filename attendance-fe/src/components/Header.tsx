@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom"; // Hoặc link điều hướng 
 import { authService } from "../services/authService";
 import { tokenManager } from "../utils/api";
 
-interface UserProfile {
+export interface UserProfile {
   student_id: string;
   email: string;
   name: string;
@@ -25,6 +25,7 @@ export default function Header() {
       const res = await authService.profile(token);
       console.log("Profile API response:", JSON.stringify(res));
       if (res.success) {
+        localStorage.setItem("user_profile", JSON.stringify(res.user_profile));
         setUser(res.user_profile);
       }
     } catch (err) {

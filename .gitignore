@@ -1,0 +1,66 @@
+# Root gitignore for attendance-project
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.pytest_cache/
+.python-version
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+pyvenv.cfg
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Python envs and secrets
+*.env
+*.env.*
+.local
+
+# Node / frontend artifacts
+attendance-fe/node_modules/
+attendance-fe/dist/
+attendance-fe/.vite/
+attendance-fe/npm-debug.log*
+attendance-fe/yarn-debug.log*
+attendance-fe/pnpm-debug.log*
+attendance-fe/lerna-debug.log*
+
+# IDE/editor files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.code-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Data and model artifacts (do not commit large generated files)
+attendance-be/checkpoints/
+attendance-be/dataset/
+attendance-be/mtcnn_facenet_model/__pycache__/
+attendance-be/resnet/__pycache__/
+attendance-be/retina/__pycache__/
+attendance-be/*.pyc
+attendance-be/*.pkl
+attendance-be/*.pth
+attendance-be/*.pt
+attendance-be/*.ckpt
+attendance-be/*.pb
+attendance-be/*.onnx
+attendance-be/*.h5
+attendance-be/*.tflite
+attendance-be/checkpoints/pytorch_model.bin

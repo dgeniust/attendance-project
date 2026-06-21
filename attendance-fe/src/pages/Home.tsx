@@ -6,10 +6,43 @@ import {
   CheckCircle,
   ArrowRight,
 } from "lucide-react";
+import type { UserProfile } from "../components/Header";
 import { useNavigate } from "react-router-dom";
+import { attendanceService } from "../services/attendance";
+import { useToast } from "../context/ToastContext";
 
 export default function Home() {
   const navigate = useNavigate();
+  const { showToast } = useToast();
+  const getStudentIdFromStorage = (): string | null => {
+    const profileString = localStorage.getItem("user_profile");
+
+    if (!profileString) return null;
+
+    try {
+      // Ép kiểu dữ liệu sau khi parse về interface UserProfile
+      const profileObject = JSON.parse(profileString) as UserProfile;
+
+      return profileObject.student_id;
+    } catch (error) {
+      console.error("Lỗi parse JSON:", error);
+      return null;
+    }
+  };
+  const handleCheck = async () => {
+    try {
+      const currentStudentId: string | null = getStudentIdFromStorage();
+      if (currentStudentId) {
+        const res = await attendanceService.checkAttendance(currentStudentId);
+        if (res && res.has_checked_in) {
+          showToast("success", "Hôm nay bạn đã điểm danh rồi");
+        } else {
+          navigate("/attendance");
+        }
+      }
+      navigate("/attendance");
+    } catch (err) {}
+  };
   return (
     <main className="max-w-5xl mx-auto px-6 pt-4 pb-24 flex flex-col gap-[48px]">
       {/* HERO SECTION */}
@@ -30,7 +63,7 @@ export default function Home() {
         <div className="flex gap-4 mt-4">
           <button
             className="bg-chartwell-blue text-cloud-white text-[15px] font-medium rounded-full px-6 py-2.5 hover:opacity-90 transition-opacity shadow-md flex items-center gap-2"
-            onClick={() => navigate("/attendance")}
+            onClick={() => handleCheck()}
           >
             Điểm danh ngay <ArrowRight size={18} />
           </button>

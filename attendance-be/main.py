@@ -90,23 +90,30 @@ async def convert_upload_to_frame(file: UploadFile):
 # ==========================================
 # CÁC ROUTE API ENDPOINTS
 # ==========================================
-
+@app.get("/api/attendance/check-today/{student_id}")
+async def check_attendance(student_id: str):
+    has_checked_in = attendance_service.check_today_attendance(student_id)
+    return {
+        "student_id": student_id,
+        "has_checked_in": has_checked_in,
+        "message": "Đã điểm danh hôm nay" if has_checked_in else "Chưa điểm danh hôm nay"
+    }
 @app.post("/api/ai/attendance")
-async def api_attendance(file: UploadFile = File(...), threshold: float = 0.88,current_user: dict = Depends(get_current_user)):
+async def api_attendance(file: UploadFile = File(...), threshold: float = 0.8,current_user: dict = Depends(get_current_user), 
+    model_type: str = Form(...)):
     """API Endpoint phục vụ quét khuôn mặt điểm danh thời gian thực"""
     frame = await convert_upload_to_frame(file)
     if frame is None:
         raise HTTPException(status_code=400, detail="Tập tin hình ảnh bị hỏng hoặc không đúng định dạng.")
     # Lấy student_id từ thông tin giải mã JWT
     student_id = current_user.get("student_id")
-    result = attendance_service.recognize_and_attendance(frame=frame, current_student_id=student_id, threshold=threshold)
+    result = attendance_service.recognize_and_attendance(frame=frame, current_student_id=student_id, model_type=model_type, threshold=threshold)
     return result
 
 @app.post("/api/ai/register")
 async def api_register_student(
     file: UploadFile = File(...), 
     student_id: str = Form(...), 
-    name: str = Form(...)
 ):
     """API Endpoint phục vụ đăng ký hồ sơ khuôn mặt mới cho sinh viên"""
     frame = await convert_upload_to_frame(file)

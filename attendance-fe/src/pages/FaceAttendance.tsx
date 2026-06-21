@@ -6,9 +6,11 @@ import {
   AlertCircle,
   Award,
   VideoOff,
+  Settings,
 } from "lucide-react";
 import { useToast } from "../context/ToastContext";
 import { attendanceService } from "../services/attendance";
+import { useNavigate } from "react-router-dom";
 
 interface AttendanceResponse {
   success: boolean;
@@ -25,10 +27,16 @@ export default function FaceAttendance() {
   const [result, setResult] = useState<AttendanceResponse | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
 
+  // State lưu trữ mô hình AI được chọn (mặc định là resnet)
+  const [modelType, setModelType] = useState<string>("resnet");
+  const [count, setCount] = useState<number>(3);
+  const [afterAttendanceStatus, setAfterAttendanceStatus] = useState<
+    "complete" | "default"
+  >("default");
   // Khai báo các Ref điều khiển luồng Media stream
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
+  const navigate = useNavigate();
   // Tự động kích hoạt mở Webcam khi Sinh viên vào màn hình điểm danh
   useEffect(() => {
     async function startCamera() {
@@ -95,13 +103,32 @@ export default function FaceAttendance() {
         throw new Error("Trích xuất dữ liệu ảnh thất bại.");
       }
       console.log("Captured image blob:", imageBlob);
-      // 3. Đẩy tệp tin ảnh thật vào hàm service để gửi request dạng multipart/form-data
-      const res = await attendanceService.submitFaceData(imageBlob);
+
+      // 3. Đẩy tệp tin ảnh thật VÀ modelType đã chọn vào hàm service để gửi request
+      // Lưu ý: Thứ tự truyền đối số (imageBlob, modelType) cần khớp với định nghĩa bên service của bạn
+      const res = await attendanceService.submitFaceData(imageBlob, modelType);
       console.log("Attendance API response:", JSON.stringify(res));
 
       setResult(res);
-      if (res.success) {
+      if (res.code === "ATTENDANCE_SUCCESS") {
         showToast("success", `Đã xác thực danh tính: ${res.name}`);
+        setAfterAttendanceStatus("complete");
+        setTimeout(() => {
+          navigate("/");
+        }, 10000); // 10000ms = 10s
+      } else if (res.code === "SPOOF_DETECTED") {
+        showToast("error", res.message + "Bạn bị buộc đăng xuất!");
+        localStorage.clear();
+        navigate("/auth");
+      } else if (res.code === "FACE_NOT_FOUND") {
+        showToast("warning", res.message);
+      } else if (res.code === " MATCH_LOW_SCORE") {
+        if (count > 0) {
+          setCount(count - 1);
+          showToast("info", res.message + `.Bạn còn ${count} lần để thử`);
+        } else {
+          showToast("error", "Bạn đã hết lần thử");
+        }
       } else {
         showToast("error", res.message || "Xác thực không thành công.");
       }
@@ -187,10 +214,30 @@ export default function FaceAttendance() {
             )}
           </div>
 
+          {/* BỘ CHỌN MÔ HÌNH AI (MODEL_TYPE SELECTOR) */}
+          <div className="flex flex-col gap-2 bg-cloud-white border border-stone-border/50 rounded-[12px] p-4 shadow-sm">
+            <label className="text-[12px] font-semibold text-ash-gray tracking-[0.048px] uppercase flex items-center gap-1.5">
+              <Settings size={14} className="text-steel-gray" />
+              Cấu hình mô hình nhận diện
+            </label>
+            <select
+              value={modelType}
+              onChange={(e) => setModelType(e.target.value)}
+              disabled={isLoading}
+              className="w-full bg-canvas-fog text-slate-text border border-stone-border rounded-lg px-3 py-2 text-[14px] focus:outline-none focus:border-chartwell-blue/70 disabled:opacity-50 cursor-pointer font-medium"
+            >
+              <option value="resnet">ResNet Model</option>
+              <option value="retina">RetinaFace + ArcFace</option>
+              <option value="facenet">MTCNN + InceptionResnetV1</option>
+            </select>
+          </div>
+
           {/* HÀNH ĐỘNG KÍCH HOẠT QUÉT - PRIMARY FILLED BUTTON CHUẨN PILL */}
           <button
             onClick={handleScanAttendance}
-            disabled={isLoading || !cameraActive}
+            disabled={
+              isLoading || !cameraActive || afterAttendanceStatus === "complete"
+            }
             className="w-full bg-chartwell-blue text-cloud-white font-medium text-[14px] rounded-full py-3 hover:opacity-90 transition-opacity shadow-md flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {isLoading
