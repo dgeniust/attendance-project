@@ -1,73 +1,77 @@
-# React + TypeScript + Vite
+# attendance-fe
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend service for the attendance project.
 
-Currently, two official plugins are available:
+## Overview
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+This frontend is a React + TypeScript application built with Vite. It provides user authentication and a face attendance interface that captures webcam images and sends them to the backend for recognition.
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Login and registration for students
+- Password reset flow
+- Webcam-based face attendance capture
+- Model selection for attendance: `resnet`, `retina`, `facenet`
+- Toast notifications for user feedback
 
-## Expanding the ESLint configuration
+## Prerequisites
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Node.js 20 or later
+- npm
+- Backend running at `http://127.0.0.1:8000/api`
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Setup
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Install dependencies in `attendance-fe`:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+2. Run the development server:
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm run dev
 ```
+
+3. Open the application in the browser using the URL shown by Vite.
+
+## Project structure
+
+- `src/App.tsx` - Route definitions and layout wrapper
+- `src/pages/Auth.tsx` - Login, register, and forgot password interface
+- `src/pages/FaceAttendance.tsx` - Webcam capture and attendance submission
+- `src/services/attendance.ts` - Attendance API client
+- `src/services/authService.ts` - Auth API client
+- `src/utils/api.ts` - Fetch wrapper with JWT handling
+
+## Important configuration
+
+- The API base URL is set in `src/utils/api.ts`:
+
+```ts
+const BASE_URL = "http://127.0.0.1:8000/api";
+```
+
+- JWT access token is stored in `localStorage` under `access_token`.
+
+## Available scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build production files
+- `npm run preview` - Preview production build locally
+- `npm run lint` - Run ESLint
+
+## Usage
+
+1. Register a new student account using the Auth page.
+2. Login to obtain a JWT session.
+3. Navigate to the face attendance page.
+4. Allow webcam access.
+5. Choose a model and click to capture the face for attendance.
+
+## Notes
+
+- The attendance capture flow extracts an image from the webcam video and sends it to the backend as `FormData`.
+- The backend must be running and reachable at the configured API base URL.
+- The `FaceAttendance` page redirects the user after a successful attendance check.
