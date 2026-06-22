@@ -33,6 +33,11 @@ class AttendanceService:
             if not student_exists:
                 return False, f"Không tìm thấy thông tin MSSV {student_id} trên hệ thống. Hãy đăng ký tài khoản trước!"
 
+            # --- BỔ SUNG: KIỂM TRA TRÙNG LẶP / ĐÃ ĐĂNG KÝ KHUÔN MẶT CHƯA ---
+            # Nếu tài khoản sinh viên đã chứa ít nhất một trong các vector đặc trưng, từ chối đăng ký tiếp
+            if any(key in student_exists for key in ["embedding_resnet", "embedding_arcface", "embedding_facenet"]):
+                return False, f"Sinh viên {student_exists.get('name', student_id)} đã đăng ký dữ liệu khuôn mặt trên hệ thống rồi!"
+
             # DÙNG DEEPFACE ĐỂ ĐẢM BẢO CHẮC CHẮN CÓ KHUÔN MẶT TRONG ẢNH
             DeepFace.extract_faces(
                 img_path=img_frame, 
@@ -58,6 +63,7 @@ class AttendanceService:
                 update_data["embedding_arcface"] = arcface_vector
             except Exception as e:
                 print(f"Lỗi trích xuất RetinaFace+ArcFace: {e}")
+                
             # --- 3. CHẠY MODEL MTCNN + INCEPTION RESNET V1 ---
             try:
                 facenet_vector = self.facenet_analyzer.represent(img_frame)

@@ -118,8 +118,10 @@ export default function FaceAttendance() {
         }, 10000); // 10000ms = 10s
       } else if (res.code === "SPOOF_DETECTED") {
         showToast("error", res.message + "Bạn bị buộc đăng xuất!");
-        localStorage.clear();
-        navigate("/auth");
+        setTimeout(() => {
+          localStorage.clear();
+          navigate("/auth");
+        }, 10000); // 10000ms = 10s
       } else if (res.code === "FACE_NOT_FOUND") {
         showToast("warning", res.message);
       } else if (res.code === " MATCH_LOW_SCORE") {

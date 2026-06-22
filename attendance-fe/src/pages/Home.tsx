@@ -40,7 +40,6 @@ export default function Home() {
           navigate("/attendance");
         }
       }
-      navigate("/attendance");
     } catch (err) {}
   };
   return (
@@ -66,6 +65,12 @@ export default function Home() {
             onClick={() => handleCheck()}
           >
             Điểm danh ngay <ArrowRight size={18} />
+          </button>
+          <button
+            className="bg-chartwell-blue text-cloud-white text-[15px] font-medium rounded-full px-6 py-2.5 hover:opacity-90 transition-opacity shadow-md flex items-center gap-2"
+            onClick={() => navigate("/register-face")}
+          >
+            Đăng kí khuôn mặt
           </button>
           <button className="bg-transparent text-slate-text border border-stone-border text-[15px] font-medium rounded-[4px] px-6 py-2.5 hover:bg-stone-border/20 transition-colors">
             Tìm hiểu thêm
